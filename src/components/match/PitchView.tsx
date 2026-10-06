@@ -1,291 +1,239 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import { RotateCcw } from "lucide-react";
-import { interpolateFrame, isActionAnim } from "./pitchFrames";
-import type { FramePlayer, MatchFrame, MinuteFrames } from "./types";
-
-/**
- * Keep every 5th of the engine's ten snapshots a second. Two a second is
- * plenty for a view that glides between them, and keeps fast-forward light.
- * A 3D viewer would ask for all of them (leave `stride` out).
- */
-const SNAPSHOT_STRIDE = 5;
-/** How long a replay of one match minute takes, in milliseconds. */
-const REPLAY_MS = 12000;
-/** How long a highlight takes to play out, however fast the match is running. */
-const HIGHLIGHT_MS = 6000;
-/** Grass shown around the touchlines, in metres, so the goals and corners fit. */
-const MARGIN = 3;
-
-// Canvas drawing cannot use Tailwind classes, so the pitch palette lives here.
-const GRASS = "#2f7d4f";
-const GRASS_STRIPE = "#2a7247";
-const LINE = "rgba(255, 255, 255, 0.85)";
-const ACTION_RING = "#facc15";
-const BALL = "#ffffff";
-const SHADOW = "rgba(0, 0, 0, 0.35)";
+import { RotateCcw, SkipForward } from "lucide-react";
+import { interpolateFrame } from "./pitchFrames";
+import { eventAtCursor } from "./pitchPlayback";
+import { getCommentary } from "./commentary";
+import { PitchScene } from "./PitchScene";
+import type { MatchSnapshot, MinuteFrames } from "./types";
 
 interface PitchViewProps {
-  /** The match minute to show, or null when there is nothing to show yet. */
   minute: number | null;
-  /** Whether this is a highlight being held on screen rather than live play. */
   isHighlight?: boolean;
-  /** How long to take playing the minute out, in milliseconds. */
   playbackMs: number;
   homeColor: string;
   awayColor: string;
+  paused?: boolean;
+  snapshot?: MatchSnapshot;
+  playerJerseyMap?: ReadonlyMap<string, number>;
+  onPlaybackStart?: (minute: number) => void;
+  onPlaybackComplete?: (minute: number) => void;
+  onCursorChange?: (minute: number, second: number) => void;
 }
 
-function drawMarkings(ctx: CanvasRenderingContext2D, length: number, width: number, s: number) {
-  // Mown stripes.
-  const stripes = 12;
-  for (let i = 0; i < stripes; i++) {
-    ctx.fillStyle = i % 2 === 0 ? GRASS : GRASS_STRIPE;
-    ctx.fillRect(((length * i) / stripes) * s, 0, (length / stripes) * s + 1, width * s);
-  }
-
-  ctx.strokeStyle = LINE;
-  ctx.fillStyle = LINE;
-  ctx.lineWidth = Math.max(1, 0.18 * s);
-  ctx.strokeRect(0, 0, length * s, width * s);
-
-  // Halfway line, centre circle and spot.
-  ctx.beginPath();
-  ctx.moveTo((length / 2) * s, 0);
-  ctx.lineTo((length / 2) * s, width * s);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc((length / 2) * s, (width / 2) * s, 9.15 * s, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc((length / 2) * s, (width / 2) * s, 0.35 * s, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Penalty areas, six-yard boxes, penalty spots and goals at both ends.
-  for (const end of [0, 1]) {
-    const x = (depth: number) => (end === 0 ? depth : length - depth) * s;
-    const box = (depth: number, across: number) => {
-      const left = Math.min(x(0), x(depth));
-      ctx.strokeRect(left, ((width - across) / 2) * s, depth * s, across * s);
-    };
-    box(16.5, 40.32);
-    box(5.5, 18.32);
-    ctx.beginPath();
-    ctx.arc(x(11), (width / 2) * s, 0.35 * s, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeRect(Math.min(x(0), x(-2)), ((width - 7.32) / 2) * s, 2 * s, 7.32 * s);
-  }
-}
-
-function drawFrame(
-  ctx: CanvasRenderingContext2D,
-  frame: MatchFrame,
-  roster: FramePlayer[],
-  s: number,
-  colors: { home: string; away: string },
-) {
-  const radius = Math.max(4, 1.25 * s);
-
-  frame.players.forEach((who, i) => {
-    const info = roster[i];
-    if (!info) return;
-    const cx = who.x * s;
-    const groundY = who.y * s;
-    // Height lifts the marker up the screen and leaves its shadow on the grass.
-    const cy = groundY - who.z * s * 2;
-
-    if (who.z > 0.02) {
-      ctx.fillStyle = SHADOW;
-      ctx.beginPath();
-      ctx.ellipse(cx, groundY, radius, radius * 0.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = info.side === "Home" ? colors.home : colors.away;
-    ctx.fill();
-    ctx.lineWidth = Math.max(1, 0.25 * s);
-    ctx.strokeStyle = info.position === "Goalkeeper" ? "#111827" : "#ffffff";
-    ctx.stroke();
-
-    // A short line shows which way the player is facing.
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(who.facing) * radius * 1.7, cy + Math.sin(who.facing) * radius * 1.7);
-    ctx.strokeStyle = "#ffffff";
-    ctx.stroke();
-
-    // Kicks, tackles, headers and dives get a ring so they stand out.
-    if (isActionAnim(who.anim)) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius * 1.6, 0, Math.PI * 2);
-      ctx.strokeStyle = ACTION_RING;
-      ctx.lineWidth = Math.max(1.5, 0.3 * s);
-      ctx.stroke();
-    }
-  });
-
-  const ball = frame.ball;
-  const ballRadius = Math.max(2.5, (0.55 + ball.z * 0.06) * s);
-  ctx.fillStyle = SHADOW;
-  ctx.beginPath();
-  ctx.ellipse(ball.x * s, ball.y * s, ballRadius, ballRadius * 0.55, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = BALL;
-  ctx.strokeStyle = "#111827";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(ball.x * s, ball.y * s - ball.z * s * 2, ballRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-}
-
-/**
- * A top-down view of the pitch that plays out one match minute from the
- * engine's frame-by-frame data: all the players, the ball and its height.
- * It is the simple stand-in for a 3D viewer, drawing the very same data.
- */
+/** Plays the mod's recorded reconstruction. Viewing and seeking never issue a match command. */
 export function PitchView({
   minute,
   isHighlight = false,
   playbackMs,
   homeColor,
   awayColor,
+  paused = false,
+  snapshot,
+  playerJerseyMap,
+  onPlaybackStart,
+  onPlaybackComplete,
+  onCursorChange,
 }: PitchViewProps) {
   const { t } = useTranslation();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [data, setData] = useState<MinuteFrames | null>(null);
+  const [loaded, setLoaded] = useState<{ minute: number; data: MinuteFrames } | null>(null);
   const [failed, setFailed] = useState(false);
-  const [width, setWidth] = useState(0);
-  // Bumped to play the current minute again, slowly.
-  const [replay, setReplay] = useState(0);
-
-  // Fetch the frames for the minute on show.
+  const [progress, setProgress] = useState(0);
+  const [replaying, setReplaying] = useState(false);
+  const [seekVersion, setSeekVersion] = useState(0);
+  const progressRef = useRef(0);
+  const completedRef = useRef(false);
+  const callbacks = useRef({ onPlaybackStart, onPlaybackComplete, onCursorChange });
   useEffect(() => {
-    if (minute === null) {
-      setData(null);
-      return;
-    }
+    callbacks.current = { onPlaybackStart, onPlaybackComplete, onCursorChange };
+  }, [onPlaybackStart, onPlaybackComplete, onCursorChange]);
+  const data = loaded?.minute === minute ? loaded.data : null;
+
+  useEffect(() => {
     let cancelled = false;
-    invoke<MinuteFrames>("get_match_frames", { minute, stride: SNAPSHOT_STRIDE })
-      .then((frames) => {
+    setLoaded(null);
+    setFailed(false);
+    setReplaying(false);
+    setProgress(0);
+    progressRef.current = 0;
+    completedRef.current = false;
+    if (minute === null) return;
+    callbacks.current.onPlaybackStart?.(minute);
+    callbacks.current.onCursorChange?.(minute, 0);
+    // Keep all ten samples per second: thinning can lose short kicks and saves.
+    invoke<MinuteFrames>("get_match_frames", { minute, stride: 1 })
+      .then((data) => {
         if (cancelled) return;
-        setFailed(false);
-        setData(frames);
-        setReplay(0);
+        if (
+          !data?.frames?.length ||
+          !(data.tick_rate_hz > 0) ||
+          !(data.pitch_length > 0) ||
+          !(data.pitch_width > 0)
+        ) {
+          throw new Error("No playable frames");
+        }
+        setLoaded({ minute, data });
       })
       .catch((error) => {
+        if (cancelled) return;
         console.error("[PitchView] could not load match frames:", error);
-        if (!cancelled) setFailed(true);
+        setFailed(true);
+        callbacks.current.onPlaybackComplete?.(minute);
       });
     return () => {
       cancelled = true;
     };
   }, [minute]);
 
-  // Follow the size of the panel.
+  const duration = replaying ? 12000 : Math.max(playbackMs, isHighlight ? 6000 : 1200);
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const measure = () => setWidth(container.clientWidth);
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
-  const draw = useCallback(
-    (progress: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas || !data || width === 0) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const ratio = window.devicePixelRatio || 1;
-      const scale = width / (data.pitch_length + MARGIN * 2);
-      const height = (data.pitch_width + MARGIN * 2) * scale;
-      if (canvas.width !== Math.round(width * ratio)) {
-        canvas.width = Math.round(width * ratio);
-        canvas.height = Math.round(height * ratio);
-      }
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.fillStyle = GRASS_STRIPE;
-      ctx.fillRect(0, 0, width, height);
-      ctx.translate(MARGIN * scale, MARGIN * scale);
-      drawMarkings(ctx, data.pitch_length, data.pitch_width, scale);
-      const frame = interpolateFrame(data.frames, progress);
-      if (frame) drawFrame(ctx, frame, data.players, scale, { home: homeColor, away: awayColor });
-    },
-    [data, width, homeColor, awayColor],
-  );
-
-  // Play the minute out, then hold on its last moment.
-  useEffect(() => {
-    if (!data) return;
-    const live = isHighlight ? HIGHLIGHT_MS : Math.max(playbackMs, 600);
-    const duration = replay > 0 ? REPLAY_MS : live;
-    const startedAt = performance.now();
+    if (!data || paused) return;
     let handle = 0;
+    let previous = performance.now();
     const step = (now: number) => {
-      const progress = Math.min(1, (now - startedAt) / duration);
-      draw(progress);
-      if (progress < 1) handle = requestAnimationFrame(step);
+      // Returning from a hidden window must not skip the whole scene.
+      const elapsed = document.hidden ? 0 : Math.min(Math.max(now - previous, 0), 100);
+      previous = now;
+      progressRef.current = Math.min(1, progressRef.current + elapsed / duration);
+      setProgress(progressRef.current);
+      if (progressRef.current < 1) handle = requestAnimationFrame(step);
     };
     handle = requestAnimationFrame(step);
     return () => cancelAnimationFrame(handle);
-  }, [data, draw, playbackMs, replay, isHighlight]);
+  }, [data, paused, duration, replaying, seekVersion]);
 
-  const height =
-    data && width > 0
-      ? ((data.pitch_width + MARGIN * 2) * width) / (data.pitch_length + MARGIN * 2)
-      : 0;
+  const frame = data ? interpolateFrame(data.frames, progress) : null;
+  const second =
+    data && frame ? Math.min(59.9, Math.round((frame.tick / data.tick_rate_hz) * 10) / 10) : 0;
+  useEffect(() => {
+    if (minute !== null && data) callbacks.current.onCursorChange?.(minute, second);
+  }, [minute, second, data]);
+  useEffect(() => {
+    if (minute !== null && data && progress >= 1 && !completedRef.current) {
+      completedRef.current = true;
+      callbacks.current.onPlaybackComplete?.(minute);
+    }
+  }, [minute, data, progress]);
+
+  const names = useMemo(
+    () =>
+      new Map(
+        [
+          ...(snapshot?.home_team.players ?? []),
+          ...(snapshot?.away_team.players ?? []),
+          ...(snapshot?.home_bench ?? []),
+          ...(snapshot?.away_bench ?? []),
+        ].map((player) => [player.id, player.name]),
+      ),
+    [snapshot],
+  );
+  const event =
+    snapshot && minute !== null ? eventAtCursor(snapshot.events, minute, second) : undefined;
+  const commentary = event && snapshot ? getCommentary(event, snapshot, t) : null;
+  const seek = (value: number) => {
+    if (!data || minute === null) return;
+    callbacks.current.onPlaybackStart?.(minute);
+    completedRef.current = false;
+    progressRef.current = value;
+    setSeekVersion((version) => version + 1);
+    setProgress(value);
+  };
+  const buttonClass =
+    "flex items-center gap-2 rounded-lg bg-gray-200 px-3 py-2 font-heading text-xs font-bold uppercase tracking-wider text-gray-700 hover:bg-gray-300 disabled:opacity-40 dark:bg-navy-700 dark:text-gray-200 dark:hover:bg-navy-600";
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-heading text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="font-heading text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
           {minute === null
-            ? t("match.pitchWaiting", "No highlights yet")
+            ? t("match.pitchWaiting")
             : isHighlight
-              ? t("match.pitchHighlightMinute", {
-                  defaultValue: "Latest highlight: minute {{minute}}",
-                  minute,
-                })
-              : t("match.pitchMinute", { defaultValue: "Minute {{minute}}", minute })}
+              ? t("match.pitchHighlightMinute", { minute })
+              : t("match.pitchMinute", { minute })}
         </p>
-        <button
-          type="button"
-          onClick={() => setReplay((count) => count + 1)}
-          disabled={!data}
-          className="flex items-center gap-2 rounded-full bg-gray-200 px-3 py-1 font-heading text-xs font-bold uppercase tracking-wider text-gray-600 transition-colors hover:bg-gray-300 disabled:opacity-50 dark:bg-navy-700 dark:text-gray-300 dark:hover:bg-navy-600"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          {t("match.pitchReplay", "Replay this minute")}
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={!data}
+            onClick={() => {
+              setReplaying(true);
+              seek(0);
+            }}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {t("match.pitchReplay")}
+          </button>
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={!data || progress >= 1}
+            onClick={() => seek(1)}
+          >
+            <SkipForward className="h-3.5 w-3.5" />
+            {t("match.pitchSkip")}
+          </button>
+        </div>
       </div>
-      <div ref={containerRef} className="w-full overflow-hidden rounded-lg">
-        <canvas
-          ref={canvasRef}
-          role="img"
-          aria-label={t("match.pitchLabel", "Top-down view of the pitch")}
-          style={{ width: "100%", height: height > 0 ? `${height}px` : undefined }}
+      {snapshot && (
+        <div className="flex justify-between gap-3 font-heading text-sm font-bold text-gray-700 dark:text-gray-200">
+          <span className="flex items-center gap-2">
+            <span
+              className="h-3 w-3 rounded-full border-2 border-white"
+              style={{ backgroundColor: homeColor }}
+            />
+            {snapshot.home_team.name}
+          </span>
+          <span className="flex items-center gap-2">
+            {snapshot.away_team.name}
+            <span
+              className="h-3 w-3 rounded-full border-2 border-navy-900"
+              style={{ backgroundColor: awayColor }}
+            />
+          </span>
+        </div>
+      )}
+      <PitchScene
+        data={data}
+        frame={frame}
+        homeColor={homeColor}
+        awayColor={awayColor}
+        label={t("match.pitchLabel")}
+        jerseys={playerJerseyMap}
+        names={names}
+      />
+      <div className="flex items-center gap-3">
+        <span className="min-w-12 font-heading text-sm tabular-nums text-gray-600 dark:text-gray-300">
+          {minute ?? 0}:{String(Math.floor(second)).padStart(2, "0")}
+        </span>
+        <input
+          type="range"
+          min="0"
+          max="1000"
+          value={Math.round(progress * 1000)}
+          disabled={!data}
+          aria-label={t("match.pitchTimeline")}
+          className="w-full accent-primary-500"
+          onChange={(event) => seek(Number(event.target.value) / 1000)}
         />
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400">
+      {commentary && (
+        <div className="min-h-16 rounded-lg border border-gray-200 bg-white p-3 dark:border-navy-700 dark:bg-navy-800">
+          <p className="font-heading text-sm font-bold uppercase text-primary-600 dark:text-primary-400">
+            {commentary.headline}
+          </p>
+          <p className="text-sm text-gray-700 dark:text-gray-200">{commentary.line}</p>
+        </div>
+      )}
+      <p className="text-xs text-gray-500 dark:text-gray-400" role="status">
         {minute === null
-          ? t(
-              "match.pitchWaitingNote",
-              "The pitch will show the next highlight as soon as there is one.",
-            )
+          ? t("match.pitchWaitingNote")
           : failed
-            ? t("match.pitchUnavailable", "The pitch view is not available for this minute.")
-            : t(
-                "match.pitchNote",
-                "Player movement is worked out from the match events. A yellow ring marks a kick, tackle, header or save.",
-              )}
+            ? t("match.pitchUnavailable")
+            : !data
+              ? t("match.pitchLoading")
+              : t("match.pitchNote")}
       </p>
     </div>
   );

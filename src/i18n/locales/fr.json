@@ -2524,7 +2524,10 @@
     "yourResult": "Votre résultat",
     "continue": "Continuer",
     "notableUpset": "Résultat surprise",
-    "pts": "pts"
+    "pts": "pts",
+    "pitchSkip": "Aller à la fin",
+    "pitchTimeline": "Chronologie de l’action",
+    "pitchLoading": "Chargement du terrain…"
   },
   "endOfSeason": {
     "seasonComplete": "Saison Terminée",
@@ -4139,12 +4142,12 @@
     "itemCrashDesc": "Inclus parce que quelque chose a planté pendant votre dernière session.",
     "optionalHeading": "À ajouter si vous voulez — désactivé par défaut",
     "includeSave": "Ma sauvegarde",
-      "includeSaveDesc": "Nous permet de rejouer exactement la situation dans laquelle vous étiez.",
+    "includeSaveDesc": "Nous permet de rejouer exactement la situation dans laquelle vous étiez.",
     "includeSaveNoCareer": "Aucune carrière ouverte, il n'y a donc rien à joindre.",
     "nothingSentYet": "Rien n'est enregistré ni ouvert avant que vous n'appuyiez sur le bouton ci-dessous. Envoyer le formulaire demande un compte GitHub — le fichier est à vous dans tous les cas.",
     "savedTo": "Votre fichier de rapport a été enregistré ici :",
     "dragItIn": "Glissez-le sur le formulaire GitHub dans votre navigateur, puis envoyez. C'est tout.",
-      "browserDidNotOpen": "Votre navigateur ne s'est pas ouvert. Le fichier ci-dessus est enregistré — joignez-le à un nouveau ticket sur GitHub quand vous pouvez.",
+    "browserDidNotOpen": "Votre navigateur ne s'est pas ouvert. Le fichier ci-dessus est enregistré — joignez-le à un nouveau ticket sur GitHub quand vous pouvez.",
     "review": "Vérifier ce qui est envoyé",
     "saveAndOpen": "Enregistrer le fichier et ouvrir GitHub",
     "working": "En cours…"

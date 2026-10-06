@@ -2524,7 +2524,10 @@
     "yourResult": "你的成绩",
     "continue": "继续",
     "notableUpset": "重大爆冷",
-    "pts": "分"
+    "pts": "分",
+    "pitchSkip": "跳至结尾",
+    "pitchTimeline": "精彩片段时间轴",
+    "pitchLoading": "正在加载球场…"
   },
   "endOfSeason": {
     "seasonComplete": "赛季结束",
@@ -4139,12 +4142,12 @@
     "itemCrashDesc": "包含在内，因为你上次游戏时有程序崩溃。",
     "optionalHeading": "可选添加 — 默认关闭",
     "includeSave": "我的存档",
-      "includeSaveDesc": "让我们能重现你当时的确切情况。",
+    "includeSaveDesc": "让我们能重现你当时的确切情况。",
     "includeSaveNoCareer": "当前没有进行中的生涯，没有可附加的内容。",
     "nothingSentYet": "在你点击下方按钮之前，不会保存或打开任何内容。提交表单需要 GitHub 账号 —— 无论如何，文件都是你的。",
     "savedTo": "你的报告文件已保存在：",
     "dragItIn": "把它拖到浏览器中的 GitHub 表单里，然后提交。就这么简单。",
-      "browserDidNotOpen": "浏览器没有打开。上方的文件已保存 —— 方便时把它附加到 GitHub 上的新 issue 里。",
+    "browserDidNotOpen": "浏览器没有打开。上方的文件已保存 —— 方便时把它附加到 GitHub 上的新 issue 里。",
     "review": "查看将发送的内容",
     "saveAndOpen": "保存文件并打开 GitHub",
     "working": "处理中……"

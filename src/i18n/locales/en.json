@@ -2668,7 +2668,10 @@
     },
     "pitchWaiting": "No highlights yet",
     "pitchHighlightMinute": "Latest highlight: minute {{minute}}",
-    "pitchWaitingNote": "The pitch will show the next highlight as soon as there is one."
+    "pitchWaitingNote": "The pitch will show the next highlight as soon as there is one.",
+    "pitchSkip": "Skip to end",
+    "pitchTimeline": "Highlight timeline",
+    "pitchLoading": "Loading the pitch…"
   },
   "endOfSeason": {
     "seasonComplete": "Season Complete",

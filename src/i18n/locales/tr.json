@@ -2524,7 +2524,10 @@
     "yourResult": "Sizin Sonucunuz",
     "continue": "Devam Et",
     "notableUpset": "Dikkat Çeken Sürpriz",
-    "pts": "P"
+    "pts": "P",
+    "pitchSkip": "Sona atla",
+    "pitchTimeline": "Pozisyon zaman çizelgesi",
+    "pitchLoading": "Saha yükleniyor…"
   },
   "endOfSeason": {
     "seasonComplete": "Sezon Tamamlandı",
@@ -4139,12 +4142,12 @@
     "itemCrashDesc": "Son oturumunda bir şey çöktüğü için eklendi.",
     "optionalHeading": "İstersen ekle — varsayılan olarak kapalı",
     "includeSave": "Kayıt dosyam",
-      "includeSaveDesc": "İçinde bulunduğun durumu birebir yeniden oynatmamızı sağlar.",
+    "includeSaveDesc": "İçinde bulunduğun durumu birebir yeniden oynatmamızı sağlar.",
     "includeSaveNoCareer": "Açık bir kariyer yok, eklenecek bir şey de yok.",
     "nothingSentYet": "Aşağıdaki düğmeye basana kadar hiçbir şey kaydedilmez veya açılmaz. Formu göndermek için bir GitHub hesabı gerekir — dosya her durumda senin.",
     "savedTo": "Rapor dosyan buraya kaydedildi:",
     "dragItIn": "Tarayıcıdaki GitHub formuna sürükle ve gönder. Hepsi bu.",
-      "browserDidNotOpen": "Tarayıcın açılmadı. Yukarıdaki dosya kaydedildi — fırsatın olduğunda GitHub'da yeni bir issue'ya ekle.",
+    "browserDidNotOpen": "Tarayıcın açılmadı. Yukarıdaki dosya kaydedildi — fırsatın olduğunda GitHub'da yeni bir issue'ya ekle.",
     "review": "Ne gönderildiğini incele",
     "saveAndOpen": "Dosyayı kaydet ve GitHub'ı aç",
     "working": "Çalışıyor…"

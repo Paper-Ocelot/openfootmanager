@@ -17,6 +17,7 @@ import { Badge, TeamLogo } from "../ui";
 import { useSettingsStore } from "../../store/settingsStore";
 import { EventFeed, MatchStats, Lineups } from "./MatchPanels";
 import { PitchView } from "./PitchView";
+import { eventPlaybackSecond, scoreAtCursor } from "./pitchPlayback";
 import { HIGHLIGHT_MODES, type HighlightMode, eventsForMode, minuteToWatch } from "./highlights";
 import MatchScreenLayout from "./MatchScreenLayout";
 import { SubPanel } from "./SubPanel";
@@ -88,7 +89,54 @@ export default function MatchLive({
     () => [...eventsForMode(snapshot.events, highlightMode)].reverse(),
     [snapshot.events, highlightMode],
   );
-  const pitchMinute = minuteToWatch(snapshot.events, highlightMode, snapshot.current_minute);
+  const pitchMinute =
+    snapshot.current_minute > 0
+      ? minuteToWatch(snapshot.events, highlightMode, snapshot.current_minute)
+      : null;
+  const [pitchPlayback, setPitchPlayback] = useState({ minute: -1, second: 0, complete: false });
+  const [pendingPhase, setPendingPhase] = useState<string | null>(null);
+  const steppingRef = useRef(false);
+  const pitchPending =
+    activePanel === "pitch" &&
+    pitchMinute !== null &&
+    (pitchPlayback.minute !== pitchMinute || !pitchPlayback.complete);
+  const startPitch = useCallback(
+    (minute: number) => setPitchPlayback({ minute, second: 0, complete: false }),
+    [],
+  );
+  const finishPitch = useCallback(
+    (minute: number) => setPitchPlayback({ minute, second: 60, complete: true }),
+    [],
+  );
+  const movePitch = useCallback(
+    (minute: number, second: number) =>
+      setPitchPlayback((current) =>
+        current.minute === minute && current.second === second
+          ? current
+          : { ...current, minute, second },
+      ),
+    [],
+  );
+  const displayScore =
+    activePanel === "pitch" && pitchMinute !== null
+      ? scoreAtCursor(
+          snapshot,
+          pitchMinute,
+          pitchPlayback.minute === pitchMinute ? pitchPlayback.second : 0,
+        )
+      : { home: snapshot.home_score, away: snapshot.away_score };
+  const displayMinute =
+    activePanel === "pitch" && pitchMinute !== null ? pitchMinute : snapshot.current_minute;
+  const visibleImportantEvents =
+    activePanel === "pitch" && pitchMinute !== null
+      ? importantEvents.filter(
+          (event) =>
+            event.minute < pitchMinute ||
+            (event.minute === pitchMinute &&
+              eventPlaybackSecond(event) <=
+                (pitchPlayback.minute === pitchMinute ? pitchPlayback.second : 0)),
+        )
+      : importantEvents;
   const [isRunning, setIsRunning] = useState(true);
   const [showSubPanel, setShowSubPanel] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,6 +165,8 @@ export default function MatchLive({
   // ofm_core/live_match_manager.rs; MINUTES_PER_TICK on this side is what makes batches possible.
   const stepMatch = useCallback(
     async (minutes: number) => {
+      if (steppingRef.current) return;
+      steppingRef.current = true;
       try {
         const results = await invoke<MinuteResult[]>("step_live_match", { minutes });
         if (results.length > 0) {
@@ -140,44 +190,52 @@ export default function MatchLive({
           const phase = lastResult.phase;
           if (phase === "HalfTime" && !signaledRef.current.has("HalfTime")) {
             signaledRef.current.add("HalfTime");
-            setIsRunning(false);
-            setSpeed("paused");
-            // Small delay so the last event renders before transitioning
-            setTimeout(() => onHalfTime("HalfTime"), 600);
+            setPendingPhase("HalfTime");
             return;
           }
 
           if (phase === "ExtraTimeHalfTime" && !signaledRef.current.has("ExtraTimeHalfTime")) {
             signaledRef.current.add("ExtraTimeHalfTime");
-            setIsRunning(false);
-            setSpeed("paused");
-            setTimeout(() => onHalfTime("ExtraTimeHalfTime"), 600);
+            setPendingPhase("ExtraTimeHalfTime");
             return;
           }
 
           if (phase === "PenaltyShootout" && !signaledRef.current.has("PenaltyShootout")) {
             signaledRef.current.add("PenaltyShootout");
-            setIsRunning(false);
-            setSpeed("paused");
-            setTimeout(() => onPenaltyShootout?.(), 600);
+            setPendingPhase("PenaltyShootout");
             return;
           }
 
           if (lastResult.is_finished && !signaledRef.current.has("Finished")) {
             signaledRef.current.add("Finished");
-            setIsRunning(false);
-            setSpeed("paused");
-            setTimeout(() => onFullTime(), 600);
+            setPendingPhase("Finished");
             return;
           }
         }
       } catch (err) {
         console.error("Failed to step match:", err);
         setIsRunning(false);
+      } finally {
+        steppingRef.current = false;
       }
     },
     [onSnapshotUpdate, onImportantEvent, onHalfTime, onFullTime, onPenaltyShootout],
   );
+
+  // Finish the last scene before opening half-time, shootout or the final report.
+  useEffect(() => {
+    if (!pendingPhase || pitchPending) return;
+    const timer = setTimeout(() => {
+      setIsRunning(false);
+      setSpeed("paused");
+      setPendingPhase(null);
+      if (pendingPhase === "HalfTime" || pendingPhase === "ExtraTimeHalfTime")
+        onHalfTime(pendingPhase);
+      else if (pendingPhase === "PenaltyShootout") onPenaltyShootout?.();
+      else onFullTime();
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [pendingPhase, pitchPending, onHalfTime, onPenaltyShootout, onFullTime]);
 
   // Auto-step timer
   useEffect(() => {
@@ -186,9 +244,16 @@ export default function MatchLive({
       timerRef.current = null;
     }
 
-    if (isRunning && speed !== "paused" && !isFinished && !showSubPanel) {
+    if (
+      isRunning &&
+      speed !== "paused" &&
+      !isFinished &&
+      !showSubPanel &&
+      !pitchPending &&
+      !pendingPhase
+    ) {
       timerRef.current = setTimeout(async () => {
-        await stepMatch(MINUTES_PER_TICK[speed]);
+        await stepMatch(activePanel === "pitch" ? 1 : MINUTES_PER_TICK[speed]);
       }, SPEED_MS[speed]);
     }
 
@@ -203,6 +268,9 @@ export default function MatchLive({
     stepMatch,
     isFinished,
     showSubPanel,
+    pitchPending,
+    pendingPhase,
+    activePanel,
   ]);
 
   // No auto-scroll: new events arrive at the top, where the feed already sits.
@@ -294,18 +362,18 @@ export default function MatchLive({
 
               <div className="flex items-center gap-3">
                 <span className="text-4xl font-heading font-bold text-gray-900 dark:text-white tabular-nums">
-                  {snapshot.home_score}
+                  {displayScore.home}
                 </span>
                 <div className="flex flex-col items-center">
                   <span className="text-xs font-heading uppercase tracking-widest text-accent-700 dark:text-accent-400">
                     {phaseLabel(snapshot.phase, t)}
                   </span>
                   <span className="text-2xl font-heading font-bold text-gray-500 dark:text-gray-400">
-                    {snapshot.current_minute}'
+                    {displayMinute}'
                   </span>
                 </div>
                 <span className="text-4xl font-heading font-bold text-gray-900 dark:text-white tabular-nums">
-                  {snapshot.away_score}
+                  {displayScore.away}
                 </span>
               </div>
 
@@ -334,7 +402,7 @@ export default function MatchLive({
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               <span className="text-sm font-heading text-gray-500 dark:text-gray-400 tabular-nums w-8">
-                {snapshot.current_minute}'
+                {displayMinute}'
               </span>
             </div>
           </div>
@@ -440,7 +508,21 @@ export default function MatchLive({
               <PitchView
                 minute={pitchMinute}
                 isHighlight={highlightMode !== "full"}
-                playbackMs={speed === "paused" ? 6000 : SPEED_MS[speed]}
+                playbackMs={
+                  speed === "slow"
+                    ? 18000
+                    : speed === "fast"
+                      ? 4000
+                      : speed === "instant"
+                        ? 1200
+                        : 10000
+                }
+                paused={!isRunning || speed === "paused" || showSubPanel}
+                snapshot={snapshot}
+                playerJerseyMap={playerJerseyMap}
+                onPlaybackStart={startPitch}
+                onPlaybackComplete={finishPitch}
+                onCursorChange={movePitch}
                 homeColor={homeTeamColor}
                 awayColor={awayTeamColor}
               />
@@ -509,6 +591,7 @@ export default function MatchLive({
             {speed === "paused" && (
               <button
                 type="button"
+                disabled={pendingPhase !== null}
                 onClick={() => stepMatch(1)}
                 className="w-full mt-2 flex items-center justify-center gap-2 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-navy-700 dark:hover:bg-navy-600 rounded-lg text-sm font-heading uppercase tracking-wider text-gray-700 dark:text-gray-300 transition-colors"
               >
@@ -597,7 +680,7 @@ export default function MatchLive({
               {t("match.keyEvents")}
             </h3>
             <div className="flex flex-col gap-1.5">
-              {importantEvents
+              {visibleImportantEvents
                 .filter((e) =>
                   [
                     "Goal",
@@ -631,7 +714,7 @@ export default function MatchLive({
                     </div>
                   );
                 })}
-              {importantEvents.length === 0 && (
+              {visibleImportantEvents.length === 0 && (
                 <p className="text-gray-600 dark:text-gray-500 text-xs">{t("match.noEventsYet")}</p>
               )}
             </div>

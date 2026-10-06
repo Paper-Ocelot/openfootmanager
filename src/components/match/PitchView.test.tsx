@@ -46,7 +46,7 @@ describe("PitchView", () => {
     );
 
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("get_match_frames", { minute: 12, stride: 5 }),
+      expect(invoke).toHaveBeenCalledWith("get_match_frames", { minute: 12, stride: 1 }),
     );
     expect(screen.getByText("Minute 12")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Top-down view of the pitch" })).toBeInTheDocument();
@@ -57,7 +57,7 @@ describe("PitchView", () => {
 
     rerender(<PitchView minute={13} playbackMs={800} homeColor="#dc2626" awayColor="#2563eb" />);
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("get_match_frames", { minute: 13, stride: 5 }),
+      expect(invoke).toHaveBeenCalledWith("get_match_frames", { minute: 13, stride: 1 }),
     );
   });
 
@@ -98,7 +98,20 @@ describe("PitchView", () => {
     );
     expect(screen.getByText("Latest highlight: minute 21")).toBeInTheDocument();
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("get_match_frames", { minute: 21, stride: 5 }),
+      expect(invoke).toHaveBeenCalledWith("get_match_frames", { minute: 21, stride: 1 }),
     );
   });
+});
+
+it("disables replay after moving from valid frames to an unavailable minute", async () => {
+  vi.mocked(invoke).mockResolvedValueOnce(frames).mockRejectedValueOnce(new Error("missing"));
+  const { rerender } = render(
+    <PitchView minute={12} playbackMs={800} homeColor="red" awayColor="blue" />,
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Replay this minute" })).toBeEnabled(),
+  );
+  rerender(<PitchView minute={13} playbackMs={800} homeColor="red" awayColor="blue" />);
+  await screen.findByText("The pitch view is not available for this minute.");
+  expect(screen.getByRole("button", { name: "Replay this minute" })).toBeDisabled();
 });

@@ -45,3 +45,9 @@ describe("isActionAnim", () => {
     expect(isActionAnim("Idle")).toBe(false);
   });
 });
+
+// Frames can be thinned or have a shorter final interval. Time, not array index, governs playback.
+it("uses recorded ticks when frame spacing is uneven", () => {
+  const frames = [frame(0, 0, 0, 0), frame(10, 10, 0, 0), frame(100, 100, 0, 0)];
+  expect(interpolateFrame(frames, 0.5)?.ball.x).toBeCloseTo(50);
+});
