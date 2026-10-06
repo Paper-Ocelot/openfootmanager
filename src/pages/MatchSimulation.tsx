@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { applyExtraTranslations } from "../lib/extraTranslations";
 import { useGameStore, type GameStateData } from "../store/gameStore";
 import { useSettingsStore } from "../store/settingsStore";
 import type {
@@ -71,6 +72,49 @@ export default function MatchSimulation() {
         : "normal",
     );
   }, [settings.match_speed, hasUserOverriddenSpeed]);
+
+  // Recover after a page reload. The game state lives in memory on this side,
+  // so a reload in the middle of a match leaves this screen with nothing to
+  // draw and it would sit on "Loading game state..." for ever. The backend still
+  // holds both the game and the match, so fetch the game back and rejoin the
+  // match at the point it had reached instead of at the pre-match screen.
+  const [needsResume, setNeedsResume] = useState(false);
+  useEffect(() => {
+    if (gameState) return;
+    let cancelled = false;
+    invoke<GameStateData>("get_active_game")
+      .then((activeState) => {
+        if (cancelled || !activeState) return;
+        applyExtraTranslations(activeState.extra_translations);
+        setGameState(activeState);
+        setNeedsResume(true);
+      })
+      .catch((error) => {
+        console.error("[MatchSimulation] could not reload the game state:", error);
+        if (!cancelled) navigate("/");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gameState, setGameState, navigate]);
+
+  useEffect(() => {
+    if (!needsResume || !snapshot) return;
+    setNeedsResume(false);
+    const stageForPhase: Partial<Record<string, MatchDayStage>> = {
+      FirstHalf: "first_half",
+      HalfTime: "halftime",
+      SecondHalf: "second_half",
+      FullTime: "second_half",
+      ExtraTimeFirstHalf: "second_half",
+      ExtraTimeHalfTime: "extra_time_halftime",
+      ExtraTimeSecondHalf: "extra_time_second_half",
+      ExtraTimeEnd: "extra_time_second_half",
+      PenaltyShootout: "penalty_shootout",
+    };
+    const resumed = stageForPhase[snapshot.phase];
+    if (resumed) setStage(resumed);
+  }, [needsResume, snapshot]);
 
   // Determine user side from game state
   useEffect(() => {

@@ -28,6 +28,10 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("../lib/extraTranslations", () => ({
+  applyExtraTranslations: vi.fn(),
+}));
+
 vi.mock("../store/gameStore", () => ({
   useGameStore: () => gameStoreState,
 }));

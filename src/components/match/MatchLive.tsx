@@ -76,6 +76,10 @@ export default function MatchLive({
       : "normal");
   const [speed, setSpeed] = useState<SimSpeed>(initialSpeed);
   const [activePanel, setActivePanel] = useState<ActivePanel>("events");
+  // Full commentary shows every event the engine produced (passes, tackles,
+  // dribbles...); key moments is the short list of goals, cards and subs.
+  const [feedMode, setFeedMode] = useState<"full" | "key">("full");
+  const feedEvents = feedMode === "full" ? snapshot.events : importantEvents;
   const [isRunning, setIsRunning] = useState(true);
   const [showSubPanel, setShowSubPanel] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -192,12 +196,16 @@ export default function MatchLive({
     showSubPanel,
   ]);
 
-  // Auto-scroll event feed
+  // Auto-scroll event feed. The list itself does not scroll — the panel around
+  // it does — so that is the element to move to keep the newest line in view.
+  const feedLength = feedEvents.length;
   useEffect(() => {
-    if (eventFeedRef.current) {
-      eventFeedRef.current.scrollTop = eventFeedRef.current.scrollHeight;
+    if (feedLength === 0) return;
+    const scroller = eventFeedRef.current?.parentElement;
+    if (scroller) {
+      scroller.scrollTop = scroller.scrollHeight;
     }
-  }, [importantEvents.length]);
+  }, [feedLength]);
 
   // Apply substitution
   const handleSubstitution = async (playerOffId: string, playerOnId: string) => {
@@ -394,12 +402,36 @@ export default function MatchLive({
 
           <div className="flex-1 overflow-auto p-4">
             {activePanel === "events" && (
-              <EventFeed
-                events={importantEvents}
-                snapshot={snapshot}
-                feedRef={eventFeedRef}
-                playerJerseyMap={playerJerseyMap}
-              />
+              <>
+                <div className="sticky top-0 z-10 -mt-1 mb-3 flex gap-2">
+                  {(
+                    [
+                      { id: "full", label: t("match.feedFull", "Full commentary") },
+                      { id: "key", label: t("match.feedKey", "Key moments") },
+                    ] as const
+                  ).map((mode) => (
+                    <button
+                      type="button"
+                      key={mode.id}
+                      onClick={() => setFeedMode(mode.id)}
+                      aria-pressed={feedMode === mode.id}
+                      className={`rounded-full px-3 py-1 font-heading text-xs font-bold uppercase tracking-wider shadow-sm transition-colors ${
+                        feedMode === mode.id
+                          ? "bg-primary-500 text-white"
+                          : "bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-navy-700 dark:text-gray-300 dark:hover:bg-navy-600"
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+                <EventFeed
+                  events={feedEvents}
+                  snapshot={snapshot}
+                  feedRef={eventFeedRef}
+                  playerJerseyMap={playerJerseyMap}
+                />
+              </>
             )}
             {activePanel === "stats" && <MatchStats snapshot={snapshot} />}
             {activePanel === "lineups" && <Lineups snapshot={snapshot} />}

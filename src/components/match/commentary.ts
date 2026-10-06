@@ -29,6 +29,83 @@ const COMMENTARY_EVENTS = new Set([
   "HalfTime",
   "SecondHalfStart",
   "FullTime",
+  // Open play — the run of passes, dribbles and tackles between the big moments.
+  "PassCompleted",
+  "PassIntercepted",
+  "Interception",
+  "Dribble",
+  "DribbleTackled",
+  "Tackle",
+  "Cross",
+  "Clearance",
+  "Corner",
+  "FreeKick",
+  "GoalKick",
+]);
+
+/** Open-play events whose wording changes when they happen out on a wing. */
+const FLANK_EVENTS = new Set(["PassCompleted", "Dribble", "Tackle", "Interception"]);
+
+const PITCH_LENGTH = 105;
+const PITCH_WIDTH = 68;
+
+export type PitchChannel = "left" | "centre" | "right";
+export type PitchThird = "defensive" | "middle" | "attacking";
+
+export interface PitchArea {
+  channel: PitchChannel;
+  third: PitchThird;
+}
+
+/**
+ * Where an event happened, from the point of view of the team it belongs to:
+ * which flank (as that team faces the goal it attacks) and which third.
+ * Returns null for events that carry no position (older saves, test fixtures).
+ */
+export function getPitchArea(evt: MatchEvent): PitchArea | null {
+  if (typeof evt.x !== "number" || typeof evt.y !== "number") return null;
+  const isHome = evt.side === "Home";
+  // Home attacks towards x = 105, so its left flank is the top touchline (y = 0).
+  // Away attacks the other way, so everything is mirrored.
+  const forward = isHome ? evt.x : PITCH_LENGTH - evt.x;
+  const fromLeft = isHome ? evt.y : PITCH_WIDTH - evt.y;
+
+  let channel: PitchChannel = "centre";
+  if (fromLeft < PITCH_WIDTH * 0.3) channel = "left";
+  else if (fromLeft > PITCH_WIDTH * 0.7) channel = "right";
+
+  let third: PitchThird = "middle";
+  if (forward < PITCH_LENGTH / 3) third = "defensive";
+  else if (forward > (PITCH_LENGTH * 2) / 3) third = "attacking";
+
+  return { channel, third };
+}
+
+/** Short label for the feed, e.g. "Left flank · Attacking third". */
+export function getPitchAreaLabel(evt: MatchEvent, t: TFunction): string | null {
+  if (!COMMENTARY_EVENTS.has(evt.event_type)) return null;
+  if (STRUCTURAL_EVENTS.has(evt.event_type)) return null;
+  const area = getPitchArea(evt);
+  if (!area) return null;
+  const channel = t(`match.pitchArea.channel.${area.channel}`);
+  const third = t(`match.pitchArea.third.${area.third}`);
+  return `${channel} · ${third}`;
+}
+
+/** Feed timestamp: mm:ss when the engine supplied a second, otherwise the minute. */
+export function formatEventTime(evt: MatchEvent): string {
+  if (typeof evt.second !== "number") return `${evt.minute}'`;
+  return `${evt.minute}:${evt.second < 10 ? "0" : ""}${evt.second}`;
+}
+
+/** Events with no meaningful spot on the pitch. */
+const STRUCTURAL_EVENTS = new Set([
+  "KickOff",
+  "HalfTime",
+  "SecondHalfStart",
+  "FullTime",
+  "Substitution",
+  "Injury",
 ]);
 
 export interface Commentary {
@@ -114,7 +191,13 @@ function variantKey(evt: MatchEvent, snapshot: MatchSnapshot): string | null {
     if (tally === 3) return "hattrick";
     if (tally === 2) return "brace";
   }
-  return detailVariant(evt.detail);
+  const fromDetail = detailVariant(evt.detail);
+  if (fromDetail) return fromDetail;
+  if (FLANK_EVENTS.has(evt.event_type)) {
+    const area = getPitchArea(evt);
+    if (area && area.channel !== "centre") return "wide";
+  }
+  return null;
 }
 
 /** Manual interpolation since the variant string is a value, not a key. */

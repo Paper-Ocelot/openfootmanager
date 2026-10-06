@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { MatchSnapshot, MatchEvent, EnginePlayerData } from "./types";
 import { getEventDisplay, getEventTypeLabel, getPlayerName } from "./helpers";
-import { getCommentary } from "./commentary";
+import { formatEventTime, getCommentary, getPitchAreaLabel } from "./commentary";
 import { Badge } from "../ui";
 import { translatePositionAbbreviation } from "../squad/SquadTab.helpers";
 
@@ -36,13 +36,14 @@ export function EventFeed({
           const display = getEventDisplay(evt);
           const isHome = evt.side === "Home";
           const commentary = getCommentary(evt, snapshot, t);
+          const pitchArea = getPitchAreaLabel(evt, t);
           return (
             <div
               key={i}
               className={`flex items-start gap-3 px-3 py-2 rounded-lg transition-colors ${display.important ? "bg-white dark:bg-navy-800/80 border border-gray-200 dark:border-navy-700 shadow-sm" : "opacity-60"}`}
             >
-              <span className="text-gray-600 dark:text-gray-500 tabular-nums font-heading text-sm w-8 text-right flex-shrink-0 pt-0.5">
-                {evt.minute}'
+              <span className="text-gray-600 dark:text-gray-500 tabular-nums font-heading text-sm w-12 text-right flex-shrink-0 pt-0.5">
+                {formatEventTime(evt)}
               </span>
               <span className="text-lg flex-shrink-0">{display.icon}</span>
               <div className="flex-1 min-w-0">
@@ -59,6 +60,11 @@ export function EventFeed({
                       </span>
                     </div>
                     <p className="text-sm text-gray-700 dark:text-gray-300">{commentary.line}</p>
+                    {pitchArea && (
+                      <p className="text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-500">
+                        {pitchArea}
+                      </p>
+                    )}
                     {evt.event_type === "Goal" && evt.secondary_player_id && (
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         {t("match.assist", {

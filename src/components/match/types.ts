@@ -22,6 +22,12 @@ export interface MatchEvent {
   player_id: string | null;
   secondary_player_id: string | null;
   detail?: EventDetail | null;
+  /** Second within the minute (0-59), so the feed can show mm:ss. */
+  second?: number;
+  /** Metres from the home goal line (0) to the away goal line (105). */
+  x?: number;
+  /** Metres from the top touchline (0) to the bottom one (68). */
+  y?: number;
 }
 
 export interface EnginePlayerData {

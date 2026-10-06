@@ -77,6 +77,10 @@ impl LiveMatchState {
             None
         };
 
+        // The feed shows mm:ss, so give each event its second within the minute.
+        let mut events = self.events.clone();
+        crate::event::stamp_seconds(&mut events);
+
         MatchSnapshot {
             phase: self.phase,
             current_minute: self.current_minute,
@@ -90,7 +94,7 @@ impl LiveMatchState {
             away_bench: self.away_bench.clone(),
             home_possession_pct: home_pct,
             away_possession_pct: 100.0 - home_pct,
-            events: self.events.clone(),
+            events,
             home_subs_made: self.home_subs_made,
             away_subs_made: self.away_subs_made,
             max_subs: self.max_subs,

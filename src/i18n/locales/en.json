@@ -2509,6 +2509,123 @@
           "0": "That's it — full time!",
           "1": "The referee brings the match to an end."
         }
+      },
+      "PassCompleted": {
+        "headline": "Pass",
+        "lines": {
+          "0": "{{player}} keeps it moving for {{team}}.",
+          "1": "{{player}} picks out a team-mate with a tidy pass.",
+          "2": "Neat from {{player}} — {{team}} keep the ball.",
+          "3": "{{player}} threads it through the middle."
+        },
+        "wide": {
+          "headline": "Pass",
+          "lines": {
+            "0": "{{player}} executes a sharp short pass down the flank!",
+            "1": "{{player}} works it down the wing for {{team}}.",
+            "2": "{{player}} finds space out wide and moves it on."
+          }
+        }
+      },
+      "PassIntercepted": {
+        "headline": "Pass cut out",
+        "lines": {
+          "0": "{{player}}'s pass is read and cut out.",
+          "1": "Loose ball from {{player}} — {{opponent}} pounce.",
+          "2": "{{player}} tries to force it and gives the ball away."
+        }
+      },
+      "Interception": {
+        "headline": "Interception",
+        "lines": {
+          "0": "{{player}} steps in and intercepts for {{team}}.",
+          "1": "Well read by {{player}}!",
+          "2": "{{player}} cuts out the pass and {{team}} have it back."
+        },
+        "wide": {
+          "headline": "Interception",
+          "lines": {
+            "0": "{{player}} nips in by the touchline to win it for {{team}}.",
+            "1": "{{player}} reads the ball down the flank and picks it off."
+          }
+        }
+      },
+      "Dribble": {
+        "headline": "Dribble",
+        "lines": {
+          "0": "{{player}} drives forward with the ball.",
+          "1": "{{player}} glides past the marker!",
+          "2": "{{player}} carries it at the {{opponent}} defence."
+        },
+        "wide": {
+          "headline": "Dribble",
+          "lines": {
+            "0": "{{player}} skips down the touchline!",
+            "1": "{{player}} takes on the full-back out wide.",
+            "2": "{{player}} is away down the wing for {{team}}!"
+          }
+        }
+      },
+      "DribbleTackled": {
+        "headline": "Dispossessed",
+        "lines": {
+          "0": "{{player}} runs into trouble — {{victim}} takes it away.",
+          "1": "{{victim}} stands firm and stops {{player}}.",
+          "2": "{{player}} tries one trick too many and {{victim}} wins it."
+        }
+      },
+      "Tackle": {
+        "headline": "Tackle",
+        "lines": {
+          "0": "{{player}} wins it back with a crisp tackle.",
+          "1": "Strong challenge from {{player}}!",
+          "2": "{{player}} times the tackle perfectly for {{team}}."
+        },
+        "wide": {
+          "headline": "Tackle",
+          "lines": {
+            "0": "{{player}} slides in by the touchline and wins it.",
+            "1": "{{player}} shuts the door out wide."
+          }
+        }
+      },
+      "Cross": {
+        "headline": "Cross",
+        "lines": {
+          "0": "{{player}} whips a cross into the box!",
+          "1": "{{player}} swings one in from out wide.",
+          "2": "Dangerous delivery from {{player}}!"
+        }
+      },
+      "Clearance": {
+        "headline": "Clearance",
+        "lines": {
+          "0": "{{player}} clears the danger for {{team}}.",
+          "1": "{{player}} gets it away!",
+          "2": "{{player}} hacks it clear — no nonsense."
+        }
+      },
+      "Corner": {
+        "headline": "Corner",
+        "lines": {
+          "0": "Corner to {{team}}.",
+          "1": "{{team}} win a corner.",
+          "2": "It's behind — {{team}} will take the corner."
+        }
+      },
+      "FreeKick": {
+        "headline": "Free kick",
+        "lines": {
+          "0": "Free kick to {{team}}.",
+          "1": "{{team}} have a free kick in a useful position."
+        }
+      },
+      "GoalKick": {
+        "headline": "Goal kick",
+        "lines": {
+          "0": "Goal kick to {{team}}.",
+          "1": "{{team}} restart from the back."
+        }
       }
     },
     "matchReport": "Match Report",
@@ -2524,7 +2641,21 @@
     "yourResult": "Your Result",
     "continue": "Continue",
     "notableUpset": "Notable Upset",
-    "pts": "pts"
+    "pts": "pts",
+    "pitchArea": {
+      "channel": {
+        "left": "Left flank",
+        "centre": "Central",
+        "right": "Right flank"
+      },
+      "third": {
+        "defensive": "Defensive third",
+        "middle": "Middle third",
+        "attacking": "Attacking third"
+      }
+    },
+    "feedFull": "Full commentary",
+    "feedKey": "Key moments"
   },
   "endOfSeason": {
     "seasonComplete": "Season Complete",
@@ -4139,12 +4270,12 @@
     "itemCrashDesc": "Included because something crashed during your last session.",
     "optionalHeading": "Add if you want to — off by default",
     "includeSave": "My save file",
-      "includeSaveDesc": "Lets us replay the exact situation you were in.",
+    "includeSaveDesc": "Lets us replay the exact situation you were in.",
     "includeSaveNoCareer": "No career is open, so there is nothing to attach.",
     "nothingSentYet": "Nothing is saved or opened until you press the button below. Submitting the form needs a GitHub account — the file is yours either way.",
     "savedTo": "Your report file was saved here:",
     "dragItIn": "Drag it onto the GitHub form in your browser, then submit. That is everything.",
-      "browserDidNotOpen": "Your browser did not open. The file above is saved — attach it to a new issue on GitHub when you can.",
+    "browserDidNotOpen": "Your browser did not open. The file above is saved — attach it to a new issue on GitHub when you can.",
     "review": "Review what is sent",
     "saveAndOpen": "Save the file and open GitHub",
     "working": "Working…"
