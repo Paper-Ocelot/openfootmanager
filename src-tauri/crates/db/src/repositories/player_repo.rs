@@ -136,7 +136,30 @@ pub fn upsert_player(conn: &Connection, p: &Player) -> Result<(), String> {
 }
 
 /// Insert or replace multiple players.
+///
+/// A shirt number is unique within a club (`v036_player_jersey_number_unique`),
+/// and SQLite checks that after every row, not at the end of the batch. So when
+/// a number changes hands between saves — a player leaves and a team-mate takes
+/// his shirt, or two players swap — writing the new owner first collides with
+/// the old owner's row still on file, and the whole save is refused. To avoid
+/// that, every player whose club or number has changed gives up the number on
+/// file first; the upserts then hand the numbers out again.
 pub fn upsert_players(conn: &Connection, players: &[Player]) -> Result<(), String> {
+    {
+        let mut release = conn
+            .prepare_cached(
+                "UPDATE players SET jersey_number = NULL
+                 WHERE id = ?1
+                   AND jersey_number IS NOT NULL
+                   AND (jersey_number IS NOT ?2 OR team_id IS NOT ?3)",
+            )
+            .map_err(|_| GAME_PERSISTENCE_WRITE_ERROR.to_string())?;
+        for p in players {
+            release
+                .execute(params![p.id, p.jersey_number.map(|n| n as i64), p.team_id])
+                .map_err(|_| GAME_PERSISTENCE_WRITE_ERROR.to_string())?;
+        }
+    }
     for p in players {
         upsert_player(conn, p)?;
     }
@@ -502,6 +525,47 @@ mod tests {
         p.stage_wage(5000);
         p.market_value = 500_000;
         p
+    }
+
+    /// Given two team-mates on file wearing 7 and 9,
+    /// When one leaves the club and the other takes his shirt — and, separately, two players
+    ///      simply swap numbers — and the squad is saved in an order that writes the new owner
+    ///      of a number before the old one,
+    /// Then the save goes through and every player has the number he was given.
+    #[test]
+    fn a_shirt_number_can_change_hands_between_saves() {
+        let db = test_db();
+        let mut seven = sample_player("p-seven", Some("team-001"));
+        seven.jersey_number = Some(7);
+        let mut nine = sample_player("p-nine", Some("team-001"));
+        nine.jersey_number = Some(9);
+        let mut ten = sample_player("p-ten", Some("team-001"));
+        ten.jersey_number = Some(10);
+        let mut eleven = sample_player("p-eleven", Some("team-001"));
+        eleven.jersey_number = Some(11);
+        upsert_players(
+            db.conn(),
+            &[seven.clone(), nine.clone(), ten.clone(), eleven.clone()],
+        )
+        .unwrap();
+
+        // Nine inherits the 7 shirt from a player who has moved on; ten and eleven swap.
+        nine.jersey_number = Some(7);
+        seven.team_id = Some("team-002".to_string());
+        seven.jersey_number = Some(30);
+        ten.jersey_number = Some(11);
+        eleven.jersey_number = Some(10);
+        upsert_players(db.conn(), &[nine, seven, ten, eleven]).unwrap();
+
+        let numbers: std::collections::HashMap<String, Option<u8>> = load_all_players(db.conn())
+            .unwrap()
+            .into_iter()
+            .map(|p| (p.id, p.jersey_number))
+            .collect();
+        assert_eq!(numbers["p-nine"], Some(7));
+        assert_eq!(numbers["p-seven"], Some(30));
+        assert_eq!(numbers["p-ten"], Some(11));
+        assert_eq!(numbers["p-eleven"], Some(10));
     }
 
     #[test]

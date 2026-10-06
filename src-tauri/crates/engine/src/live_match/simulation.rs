@@ -224,6 +224,7 @@ impl LiveMatchState {
         let transition_events = self.check_phase_end(minute, rng);
         minute_events.extend(transition_events);
         crate::event::stamp_seconds(&mut minute_events);
+        crate::event::link_positions(&mut minute_events);
 
         MinuteResult {
             minute,

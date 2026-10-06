@@ -16,6 +16,8 @@ import { getEventDisplay, getPlayerName, makeTeamFallback, phaseLabel } from "./
 import { Badge, TeamLogo } from "../ui";
 import { useSettingsStore } from "../../store/settingsStore";
 import { EventFeed, MatchStats, Lineups } from "./MatchPanels";
+import { PitchView } from "./PitchView";
+import { HIGHLIGHT_MODES, type HighlightMode, eventsForMode, minuteToWatch } from "./highlights";
 import MatchScreenLayout from "./MatchScreenLayout";
 import { SubPanel } from "./SubPanel";
 import {
@@ -34,9 +36,10 @@ import {
   Crosshair,
   Target,
   Flag,
+  Map as MapIcon,
 } from "lucide-react";
 
-type ActivePanel = "events" | "stats" | "lineups";
+type ActivePanel = "events" | "pitch" | "stats" | "lineups";
 
 interface MatchLiveProps {
   snapshot: MatchSnapshot;
@@ -76,10 +79,16 @@ export default function MatchLive({
       : "normal");
   const [speed, setSpeed] = useState<SimSpeed>(initialSpeed);
   const [activePanel, setActivePanel] = useState<ActivePanel>("events");
-  // Full commentary shows every event the engine produced (passes, tackles,
-  // dribbles...); key moments is the short list of goals, cards and subs.
-  const [feedMode, setFeedMode] = useState<"full" | "key">("full");
-  const feedEvents = feedMode === "full" ? snapshot.events : importantEvents;
+  // One setting for the commentary and the pitch view alike: key highlights
+  // (goals, cards, changes), extended highlights (plus chances and set
+  // pieces) or the full game.
+  const [highlightMode, setHighlightMode] = useState<HighlightMode>("full");
+  // Newest first, so the latest event is always at the top of the feed.
+  const feedEvents = useMemo(
+    () => [...eventsForMode(snapshot.events, highlightMode)].reverse(),
+    [snapshot.events, highlightMode],
+  );
+  const pitchMinute = minuteToWatch(snapshot.events, highlightMode, snapshot.current_minute);
   const [isRunning, setIsRunning] = useState(true);
   const [showSubPanel, setShowSubPanel] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,16 +205,8 @@ export default function MatchLive({
     showSubPanel,
   ]);
 
-  // Auto-scroll event feed. The list itself does not scroll — the panel around
-  // it does — so that is the element to move to keep the newest line in view.
-  const feedLength = feedEvents.length;
-  useEffect(() => {
-    if (feedLength === 0) return;
-    const scroller = eventFeedRef.current?.parentElement;
-    if (scroller) {
-      scroller.scrollTop = scroller.scrollHeight;
-    }
-  }, [feedLength]);
+  // No auto-scroll: new events arrive at the top, where the feed already sits.
+  // Someone who has scrolled down to read back is left where they are.
 
   // Apply substitution
   const handleSubstitution = async (playerOffId: string, playerOnId: string) => {
@@ -374,6 +375,11 @@ export default function MatchLive({
                 icon: <MessageSquare className="w-4 h-4" />,
               },
               {
+                id: "pitch" as ActivePanel,
+                label: t("match.pitch", "Pitch"),
+                icon: <MapIcon className="w-4 h-4" />,
+              },
+              {
                 id: "stats" as ActivePanel,
                 label: t("match.stats"),
                 icon: <BarChart3 className="w-4 h-4" />,
@@ -400,38 +406,44 @@ export default function MatchLive({
             ))}
           </div>
 
+          {(activePanel === "events" || activePanel === "pitch") && (
+            <fieldset className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-4 py-2 transition-colors duration-300 dark:border-navy-700 dark:bg-navy-800">
+              <legend className="sr-only">{t("match.highlightMode", "How much to show")}</legend>
+              {HIGHLIGHT_MODES.map((mode) => (
+                <button
+                  type="button"
+                  key={mode}
+                  onClick={() => setHighlightMode(mode)}
+                  aria-pressed={highlightMode === mode}
+                  className={`rounded-full px-3 py-1 font-heading text-xs font-bold uppercase tracking-wider transition-colors ${
+                    highlightMode === mode
+                      ? "bg-primary-500 text-white"
+                      : "bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-navy-700 dark:text-gray-300 dark:hover:bg-navy-600"
+                  }`}
+                >
+                  {t(`match.highlightModes.${mode}`)}
+                </button>
+              ))}
+            </fieldset>
+          )}
+
           <div className="flex-1 overflow-auto p-4">
             {activePanel === "events" && (
-              <>
-                <div className="sticky top-0 z-10 -mt-1 mb-3 flex gap-2">
-                  {(
-                    [
-                      { id: "full", label: t("match.feedFull", "Full commentary") },
-                      { id: "key", label: t("match.feedKey", "Key moments") },
-                    ] as const
-                  ).map((mode) => (
-                    <button
-                      type="button"
-                      key={mode.id}
-                      onClick={() => setFeedMode(mode.id)}
-                      aria-pressed={feedMode === mode.id}
-                      className={`rounded-full px-3 py-1 font-heading text-xs font-bold uppercase tracking-wider shadow-sm transition-colors ${
-                        feedMode === mode.id
-                          ? "bg-primary-500 text-white"
-                          : "bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-navy-700 dark:text-gray-300 dark:hover:bg-navy-600"
-                      }`}
-                    >
-                      {mode.label}
-                    </button>
-                  ))}
-                </div>
-                <EventFeed
-                  events={feedEvents}
-                  snapshot={snapshot}
-                  feedRef={eventFeedRef}
-                  playerJerseyMap={playerJerseyMap}
-                />
-              </>
+              <EventFeed
+                events={feedEvents}
+                snapshot={snapshot}
+                feedRef={eventFeedRef}
+                playerJerseyMap={playerJerseyMap}
+              />
+            )}
+            {activePanel === "pitch" && (
+              <PitchView
+                minute={pitchMinute}
+                isHighlight={highlightMode !== "full"}
+                playbackMs={speed === "paused" ? 6000 : SPEED_MS[speed]}
+                homeColor={homeTeamColor}
+                awayColor={awayTeamColor}
+              />
             )}
             {activePanel === "stats" && <MatchStats snapshot={snapshot} />}
             {activePanel === "lineups" && <Lineups snapshot={snapshot} />}

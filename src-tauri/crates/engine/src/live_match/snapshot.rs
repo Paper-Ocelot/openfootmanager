@@ -80,6 +80,7 @@ impl LiveMatchState {
         // The feed shows mm:ss, so give each event its second within the minute.
         let mut events = self.events.clone();
         crate::event::stamp_seconds(&mut events);
+        crate::event::link_positions(&mut events);
 
         MatchSnapshot {
             phase: self.phase,
@@ -107,5 +108,25 @@ impl LiveMatchState {
             sent_off: self.sent_off.clone(),
             penalty_shootout,
         }
+    }
+
+    /// Frame-by-frame positions for one minute of this match, for a match
+    /// viewer. Read-only: asking for frames never changes the match, and the
+    /// same minute always gives the same frames, so this doubles as the replay.
+    pub fn frames_for_minute(&self, minute: u8) -> crate::frames::MinuteFrames {
+        let mut events = self.events.clone();
+        crate::event::stamp_seconds(&mut events);
+        crate::event::link_positions(&mut events);
+        let ball_start = minute
+            .checked_sub(1)
+            .and_then(|previous| crate::frames::ball_end_of_minute(previous, &events));
+        crate::frames::build_minute_frames(
+            minute,
+            &events,
+            &self.home,
+            &self.away,
+            &self.sent_off,
+            ball_start,
+        )
     }
 }

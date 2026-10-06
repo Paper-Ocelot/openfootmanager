@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod engine;
 pub mod event;
+pub mod frames;
 pub mod live_match;
 pub mod report;
 pub(crate) mod shared;
@@ -10,6 +11,10 @@ pub mod types;
 pub use engine::simulate;
 pub use engine::simulate_with_rng;
 pub use event::{EventType, MatchEvent};
+pub use frames::{
+    BallFrame, FramePlayer, MatchFrame, MinuteFrames, PlayerAnimState, PlayerFrame, TICK_RATE_HZ,
+    TICKS_PER_MINUTE,
+};
 pub use live_match::{
     LiveMatchState, MatchCommand, MatchPhase, MatchSnapshot, MinuteResult, PenaltyShootoutSnapshot,
     SetPieceTakers, SubstitutionRecord,

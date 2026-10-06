@@ -74,7 +74,7 @@ beforeAll(async () => {
 });
 
 describe("MatchLive commentary feed", () => {
-  it("shows open-play commentary by default and hides it under key moments", () => {
+  it("shows open-play commentary in the full game and hides it in the highlights modes", () => {
     render(
       <>
         <MatchLive
@@ -95,10 +95,13 @@ describe("MatchLive commentary feed", () => {
     expect(screen.getByText("5:14")).toBeInTheDocument();
     expect(screen.getByText("Central · Middle third")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Key moments" }));
+    fireEvent.click(screen.getByRole("button", { name: "Key highlights" }));
     expect(screen.queryByText("5:14")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Full commentary" }));
+    fireEvent.click(screen.getByRole("button", { name: "Extended highlights" }));
+    expect(screen.queryByText("5:14")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Full game" }));
     expect(screen.getByText("5:14")).toBeInTheDocument();
   });
 });

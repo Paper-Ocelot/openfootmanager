@@ -374,6 +374,22 @@ pub fn apply_match_command(
     Ok(snapshot)
 }
 
+/// Frame-by-frame positions (ball and every player) for one minute of the live
+/// match, for the pitch view. `stride` keeps every Nth snapshot of the ten a
+/// second the engine produces; leave it out for all of them.
+pub fn get_match_frames(
+    state: &StateManager,
+    minute: u8,
+    stride: Option<u8>,
+) -> Result<engine::MinuteFrames, String> {
+    log::debug!("[cmd] get_match_frames: minute={minute}, stride={stride:?}");
+    let frames = state
+        .with_live_match(|session| session.frames_for_minute(minute))
+        .ok_or_else(|| "be.error.noActiveLiveMatch".to_string())?;
+
+    Ok(frames.thinned(stride.unwrap_or(1)))
+}
+
 pub fn get_match_snapshot(state: &StateManager) -> Result<engine::MatchSnapshot, String> {
     log::debug!("[cmd] get_match_snapshot");
     let snapshot = state

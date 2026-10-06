@@ -1913,3 +1913,66 @@ fn every_period_lasts_its_full_length_whatever_stoppage_came_before() {
         "200 seeds should include first-half stoppage and a drawn match, or this test proves nothing"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Frame-by-frame positions for a match viewer
+// ---------------------------------------------------------------------------
+
+#[test]
+fn every_minute_of_real_matches_plays_out_as_sensible_frames() {
+    for seed in 0..12u64 {
+        let mut state = make_live_match(false);
+        let mut rng = seeded_rng(seed);
+        let mut last_minute = 0u8;
+        for _ in 0..130 {
+            let result = state.step_minute(&mut rng);
+            last_minute = last_minute.max(result.minute);
+            if result.is_finished {
+                break;
+            }
+        }
+        let before = state.snapshot();
+
+        for minute in 0..=last_minute {
+            let frames = state.frames_for_minute(minute);
+            assert_eq!(frames.frames.len(), TICKS_PER_MINUTE);
+            assert!(frames.players.len() <= 22);
+            for pair in frames.frames.windows(2) {
+                for (a, b) in pair[0].players.iter().zip(&pair[1].players) {
+                    let moved = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+                    assert!(
+                        moved <= 1.2,
+                        "seed {seed} minute {minute}: a player moved {moved} m in a tick"
+                    );
+                }
+            }
+            for frame in &frames.frames {
+                assert!(
+                    (0.0..=105.0).contains(&frame.ball.x),
+                    "ball x {}",
+                    frame.ball.x
+                );
+                assert!(
+                    (0.0..=68.0).contains(&frame.ball.y),
+                    "ball y {}",
+                    frame.ball.y
+                );
+                assert!(
+                    (0.0..=40.0).contains(&frame.ball.z),
+                    "ball z {}",
+                    frame.ball.z
+                );
+                for who in &frame.players {
+                    assert!((0.0..=105.0).contains(&who.x) && (0.0..=68.0).contains(&who.y));
+                    assert!(who.facing.is_finite() && who.z >= 0.0);
+                }
+            }
+        }
+
+        // Asking for frames must leave the match exactly as it was.
+        let after = state.snapshot();
+        assert_eq!(before.home_score, after.home_score);
+        assert_eq!(before.away_score, after.away_score);
+        assert_eq!(before.events.len(), after.events.len());
+    }
+}

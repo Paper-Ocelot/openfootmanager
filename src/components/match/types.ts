@@ -286,3 +286,59 @@ export const PLAY_STYLES = [
   "Counter",
   "HighPress",
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Frame-by-frame positions for the pitch view — mirrors engine/src/frames.rs
+// ---------------------------------------------------------------------------
+
+export type PlayerAnimState =
+  | "Idle"
+  | "Walk"
+  | "Sprint"
+  | "KickShort"
+  | "KickPower"
+  | "HeaderJump"
+  | "SlideTackle"
+  | "KeeperDiveLeft"
+  | "KeeperDiveRight";
+
+export interface FramePlayer {
+  player_id: string;
+  side: "Home" | "Away";
+  position: string;
+}
+
+export interface PlayerFrame {
+  /** Metres from the home goal line (0) to the away goal line (105). */
+  x: number;
+  /** Metres from the top touchline (0) to the bottom one (68). */
+  y: number;
+  /** Height of the player's feet above the pitch, in metres. */
+  z: number;
+  /** Radians; 0 looks at the away goal, growing towards the bottom touchline. */
+  facing: number;
+  anim: PlayerAnimState;
+}
+
+export interface BallFrame {
+  x: number;
+  y: number;
+  /** Height above the pitch, in metres. */
+  z: number;
+}
+
+export interface MatchFrame {
+  tick: number;
+  ball: BallFrame;
+  /** One entry per roster player, in roster order. */
+  players: PlayerFrame[];
+}
+
+export interface MinuteFrames {
+  minute: number;
+  tick_rate_hz: number;
+  pitch_length: number;
+  pitch_width: number;
+  players: FramePlayer[];
+  frames: MatchFrame[];
+}

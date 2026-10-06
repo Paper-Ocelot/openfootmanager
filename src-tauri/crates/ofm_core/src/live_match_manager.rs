@@ -212,6 +212,12 @@ impl LiveMatchSession {
         self.match_state.snapshot()
     }
 
+    /// Frame-by-frame positions for one minute of this match, for the pitch
+    /// view. Read-only — it never changes the match.
+    pub fn frames_for_minute(&self, minute: u8) -> engine::MinuteFrames {
+        self.match_state.frames_for_minute(minute)
+    }
+
     pub fn apply_command(&mut self, cmd: MatchCommand) -> Result<(), String> {
         self.match_state.apply_command(cmd)
     }

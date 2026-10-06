@@ -330,6 +330,63 @@ pub fn stamp_seconds(events: &mut [MatchEvent]) {
     }
 }
 
+/// Put events that belong to the same moment in the same place.
+///
+/// Each event is first placed on its own (see `pitch_position`), which leaves a
+/// tackle metres away from the dribble it stopped, or a booking far from its
+/// foul. This pass walks each minute in order and moves the follow-up event to
+/// where the one before it happened. Like [`stamp_seconds`] it depends only on
+/// the events and their order, so running it twice changes nothing.
+pub fn link_positions(events: &mut [MatchEvent]) {
+    for i in 1..events.len() {
+        let (earlier, later) = events.split_at_mut(i);
+        let previous = &earlier[i - 1];
+        let event = &mut later[0];
+        if previous.minute != event.minute {
+            continue;
+        }
+        let same_spot = matches!(
+            (&previous.event_type, &event.event_type),
+            (EventType::PassIntercepted, EventType::Interception)
+                | (EventType::DribbleTackled, EventType::Tackle)
+                | (EventType::Tackle, EventType::Foul)
+                | (
+                    EventType::Foul,
+                    EventType::YellowCard
+                        | EventType::RedCard
+                        | EventType::SecondYellow
+                        | EventType::Injury
+                        | EventType::FreeKick
+                )
+                | (
+                    EventType::YellowCard | EventType::RedCard | EventType::SecondYellow,
+                    EventType::Injury | EventType::FreeKick
+                )
+        );
+        if same_spot {
+            event.x = previous.x;
+            event.y = previous.y;
+        } else if previous.event_type == EventType::Dribble
+            && event.event_type == EventType::Cross
+            && previous.player_id == event.player_id
+        {
+            // The winger who just ran with the ball crosses from that wing, a
+            // few strides further on.
+            let towards_goal = if attacking_goal_line(event.side) > 0.0 {
+                6.0
+            } else {
+                -6.0
+            };
+            event.x = (previous.x + towards_goal).clamp(1.0, PITCH_LENGTH - 1.0);
+            event.y = if previous.y < PITCH_WIDTH / 2.0 {
+                previous.y.min(10.0)
+            } else {
+                previous.y.max(PITCH_WIDTH - 10.0)
+            };
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,5 +508,44 @@ mod tests {
         let json = r#"{"minute":10,"event_type":"Goal","side":"Home","zone":"AwayBox","player_id":"p1","secondary_player_id":null}"#;
         let evt: MatchEvent = serde_json::from_str(json).unwrap();
         assert_eq!((evt.second, evt.x, evt.y), (0, 52.5, 34.0));
+    }
+
+    #[test]
+    fn follow_up_events_happen_where_the_first_one_did() {
+        let mut events = vec![
+            MatchEvent::new(8, EventType::DribbleTackled, Side::Home, Zone::AwayDefense)
+                .with_player("a"),
+            MatchEvent::new(8, EventType::Tackle, Side::Away, Zone::AwayDefense).with_player("b"),
+            MatchEvent::new(8, EventType::Foul, Side::Away, Zone::AwayDefense).with_player("b"),
+            MatchEvent::new(8, EventType::YellowCard, Side::Away, Zone::AwayDefense)
+                .with_player("b"),
+            // A new minute starts afresh.
+            MatchEvent::new(9, EventType::Tackle, Side::Home, Zone::Midfield).with_player("c"),
+        ];
+        let untouched = (events[4].x, events[4].y);
+        link_positions(&mut events);
+        let spot = (events[0].x, events[0].y);
+        for linked in &events[1..4] {
+            assert_eq!((linked.x, linked.y), spot);
+        }
+        assert_eq!((events[4].x, events[4].y), untouched);
+
+        let once: Vec<(f32, f32)> = events.iter().map(|e| (e.x, e.y)).collect();
+        link_positions(&mut events);
+        let twice: Vec<(f32, f32)> = events.iter().map(|e| (e.x, e.y)).collect();
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn a_winger_crosses_from_the_wing_they_ran_down() {
+        let mut events = vec![
+            MatchEvent::new(8, EventType::Dribble, Side::Home, Zone::AwayDefense).with_player("w"),
+            MatchEvent::new(8, EventType::Cross, Side::Home, Zone::AwayDefense).with_player("w"),
+        ];
+        events[0].x = 78.0;
+        events[0].y = 50.0;
+        link_positions(&mut events);
+        assert_eq!(events[1].x, 84.0);
+        assert!(events[1].y >= 58.0, "crossed from y {}", events[1].y);
     }
 }

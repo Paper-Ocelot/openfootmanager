@@ -2654,8 +2654,21 @@
         "attacking": "Attacking third"
       }
     },
-    "feedFull": "Full commentary",
-    "feedKey": "Key moments"
+    "pitch": "Pitch",
+    "pitchMinute": "Minute {{minute}}",
+    "pitchReplay": "Replay this minute",
+    "pitchLabel": "Top-down view of the pitch",
+    "pitchUnavailable": "The pitch view is not available for this minute.",
+    "pitchNote": "Player movement is worked out from the match events. A yellow ring marks a kick, tackle, header or save.",
+    "highlightMode": "How much to show",
+    "highlightModes": {
+      "key": "Key highlights",
+      "extended": "Extended highlights",
+      "full": "Full game"
+    },
+    "pitchWaiting": "No highlights yet",
+    "pitchHighlightMinute": "Latest highlight: minute {{minute}}",
+    "pitchWaitingNote": "The pitch will show the next highlight as soon as there is one."
   },
   "endOfSeason": {
     "seasonComplete": "Season Complete",
